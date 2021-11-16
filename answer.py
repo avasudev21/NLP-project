@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import warnings
 warnings.filterwarnings('ignore')
 import pickle  
@@ -15,8 +16,9 @@ from nltk import Tree
 from nltk.stem.lancaster import LancasterStemmer
 st = LancasterStemmer()
 from sklearn.feature_extraction.text import TfidfVectorizer, TfidfTransformer
-nltk.download('punkt') 
+nltk.download('punkt', quiet=True) 
 import sys
+import io
 
 # Copyright (c) 2017-present, Facebook, Inc.
 # All rights reserved.
@@ -131,7 +133,7 @@ class InferSent(nn.Module):
                 word, vec = line.split(' ', 1)
                 if word in word_dict:
                     word_vec[word] = np.fromstring(vec, sep=' ')
-        print('Found %s(/%s) words with w2v vectors' % (len(word_vec), len(word_dict)))
+        #print('Found %s(/%s) words with w2v vectors' % (len(word_vec), len(word_dict)))
         return word_vec
 
     def get_w2v_k(self, K):
@@ -157,13 +159,13 @@ class InferSent(nn.Module):
         assert hasattr(self, 'w2v_path'), 'w2v path not set'
         word_dict = self.get_word_dict(sentences, tokenize)
         self.word_vec = self.get_w2v(word_dict)
-        print('Vocab size : %s' % (len(self.word_vec)))
+        #print('Vocab size : %s' % (len(self.word_vec)))
 
     # build w2v vocab with k most frequent words
     def build_vocab_k_words(self, K):
         assert hasattr(self, 'w2v_path'), 'w2v path not set'
         self.word_vec = self.get_w2v_k(K)
-        print('Vocab size : %s' % (K))
+        #print('Vocab size : %s' % (K))
 
     def update_vocab(self, sentences, tokenize=True):
         assert hasattr(self, 'w2v_path'), 'warning : w2v path not set'
@@ -181,7 +183,7 @@ class InferSent(nn.Module):
             self.word_vec.update(new_word_vec)
         else:
             new_word_vec = []
-        print('New vocab size : %s (added %s words)'% (len(self.word_vec), len(new_word_vec)))
+        #print('New vocab size : %s (added %s words)'% (len(self.word_vec), len(new_word_vec)))
 
     def get_batch(self, batch):
         # sent in batch in decreasing order of lengths
@@ -307,7 +309,7 @@ def preprocess_text(data, questions):
     quest_embeddings = {}
     for i in range(len(questions)):
         quest_embeddings[questions[i]] = infersent.encode([questions[i]], tokenize=True)
-    return([dict_embeddings,quest_embeddings])
+    return([sentences,dict_embeddings,quest_embeddings])
 
 def cosine_sim(x,question):
     li = []
@@ -319,9 +321,35 @@ def cosine_sim(x,question):
 def pred_idx(distances):
     return np.argmin(distances)  
 
-def get_answers(quest_emb, x,sentences):
+def get_answers(quest_emb, x,sentences, questions):
     answers = [0]*len(quest_emb)
     for i in range(0,len(quest_emb)):
         distances = cosine_sim(x,quest_emb[questions[i]])
         answers[i] = sentences[pred_idx(distances)]
     return(answers)
+
+if __name__ == '__main__':
+    
+    if len(sys.argv) != 3:
+        print("Usage: python3 answer.py ARTICLE_FILE_NAME QUESTIONS_FILE_NAME")
+        sys.exit(1)
+
+    article = sys.argv[1]
+    questions = sys.argv[2]
+
+    with io.open(article, 'r', encoding='utf8') as f:
+        article_text = f.read()
+
+    with io.open(questions, 'r', encoding='utf8') as f:
+        questions_text = f.readlines()
+
+
+    embeds = preprocess_text(article_text, questions_text)
+    sentences = embeds[0]
+    sent_embeds = embeds[1]
+    quest_embeds = embeds[2]
+
+    answers = get_answers(quest_embeds, sent_embeds, sentences, questions_text)
+
+    for answer in answers:
+        print(answer,"\n")
