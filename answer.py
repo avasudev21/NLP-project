@@ -14,21 +14,15 @@ en_nlp = spacy.load("en_core_web_sm")
 import ast 
 from nltk import Tree
 from nltk.stem.lancaster import LancasterStemmer
+from nltk.stem.wordnet import WordNetLemmatizer
 st = LancasterStemmer()
 from sklearn.feature_extraction.text import TfidfVectorizer, TfidfTransformer
 nltk.download('punkt', quiet=True) 
 import sys
 import io
 
-# Copyright (c) 2017-present, Facebook, Inc.
-# All rights reserved.
-#
-# This source code is licensed under the license found in the
-# LICENSE file in the root directory of this source tree.
-#
-
 """
-This file contains the definition of encoders used in https://arxiv.org/pdf/1705.02364.pdf
+Reference: https://github.com/facebookresearch/InferSent
 """
 
 import time
@@ -328,6 +322,39 @@ def get_answers(quest_emb, x,sentences, questions):
         answers[i] = sentences[pred_idx(distances)]
     return(answers)
 
+def to_nltk_tree(node):
+    if node.n_lefts + node.n_rights > 0:
+        return Tree(node.orth_, [to_nltk_tree(child) for child in node.children])
+    else:
+        return node.orth_
+
+def match_roots(question,article,sentences):
+    question = question.lower()
+    article_sents = en_nlp(article.lower()).sents
+    question_root = st.stem(str([sent.root for sent in en_nlp(question).sents][0]))
+    question_root = WordNetLemmatizer().lemmatize(question_root,"v")
+    
+    li = []
+    for i,sent in enumerate(article_sents):
+        roots = [st.stem(chunk.root.head.text.lower()) for chunk in sent.noun_chunks]
+        roots = [WordNetLemmatizer().lemmatize(i,"v") for i in roots]
+        if question_root in roots: 
+            for k , item in enumerate(sentences):
+                if str(sent) in item.lower() or item.lower() in str(sent):
+                    li.append(k)
+    return li
+
+def get_answers_root_match(quest_emb, x,sentences,article,questions):
+    answers = []
+    for i in range(0,len(quest_emb)):
+        distances = []
+        sent_inds = []
+        indices = match_roots(questions[i],article,sentences)
+        for j in indices:
+            distances.append(spatial.distance.cosine(x[sentences[j]],quest_emb[questions[i]]))
+        answers.append(sentences[indices[pred_idx(distances)]])
+    return(answers)
+
 if __name__ == '__main__':
     
     if len(sys.argv) != 3:
@@ -349,7 +376,7 @@ if __name__ == '__main__':
     sent_embeds = embeds[1]
     quest_embeds = embeds[2]
 
-    answers = get_answers(quest_embeds, sent_embeds, sentences, questions_text)
+    answers = get_answers_root_match(quest_embeds, sent_embeds, sentences, article_text,questions_text)
 
     for answer in answers:
-        print(answer,"\n")
+        print(answer)
