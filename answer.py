@@ -346,13 +346,16 @@ def match_roots(question,article,sentences):
 
 def get_answers_root_match(quest_emb, x,sentences,article,questions):
     answers = []
-    for i in range(0,len(quest_emb)):
+    for i in range(0,len(questions)):
         distances = []
         sent_inds = []
         indices = match_roots(questions[i],article,sentences)
         for j in indices:
             distances.append(spatial.distance.cosine(x[sentences[j]],quest_emb[questions[i]]))
-        answers.append(sentences[indices[pred_idx(distances)]])
+        if (indices == []):
+            answers.append("Question Limit Exceeded")
+        else:
+            answers.append(sentences[indices[pred_idx(distances)]])
     return(answers)
 
 if __name__ == '__main__':
@@ -369,7 +372,6 @@ if __name__ == '__main__':
 
     with io.open(questions, 'r', encoding='utf8') as f:
         questions_text = f.readlines()
-
 
     embeds = preprocess_text(article_text, questions_text)
     sentences = embeds[0]
